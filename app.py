@@ -11,7 +11,10 @@ Uses httpx for direct Gemini REST API calls (avoids heavy google-generativeai SD
 
 import base64
 import json
+import logging
 import os
+import shutil
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -19,14 +22,26 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from render_translation import render_document, validate_json
 
 # ---------------------------------------------------------------------------
-# Config
+# Logging
 # ---------------------------------------------------------------------------
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("uscis")
+
+# ---------------------------------------------------------------------------
+# Config — load .env if python-dotenv is available
+# ---------------------------------------------------------------------------
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
@@ -38,6 +53,14 @@ SYSTEM_PROMPT = PROMPT_PATH.read_text(encoding="utf-8") if PROMPT_PATH.exists() 
 
 # Temp directory for outputs
 OUTPUT_DIR = Path(tempfile.mkdtemp(prefix="uscis_"))
+logger.info("Output directory: %s", OUTPUT_DIR)
+
+# Check LibreOffice availability
+LIBREOFFICE_BIN = shutil.which("libreoffice") or shutil.which("soffice")
+if LIBREOFFICE_BIN:
+    logger.info("LibreOffice found: %s — PDF export enabled", LIBREOFFICE_BIN)
+else:
+    logger.warning("LibreOffice not found — PDF export disabled (DOCX only)")
 
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -54,10 +77,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve static frontend
 STATIC_DIR = Path(__file__).parent / "static"
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # In-memory job tracking
 jobs: dict[str, dict] = {}
@@ -70,7 +90,7 @@ jobs: dict[str, dict] = {}
 async def call_gemini(pdf_bytes: bytes) -> dict:
     """Send a PDF to Gemini via REST API and return parsed JSON translation."""
     if not GEMINI_API_KEY:
-        raise HTTPException(500, "GEMINI_API_KEY environment variable not set.")
+        raise HTTPException(500, "GEMINI_API_KEY not set. Add it to .env or export it.")
 
     url = f"{GEMINI_API_BASE}/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
 
@@ -101,11 +121,14 @@ async def call_gemini(pdf_bytes: bytes) -> dict:
         },
     }
 
+    logger.info("Sending %d bytes to Gemini (%s)...", len(pdf_bytes), GEMINI_MODEL)
+
     async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.post(url, json=payload)
 
     if resp.status_code != 200:
         detail = resp.text[:500]
+        logger.error("Gemini API error %d: %s", resp.status_code, detail)
         raise HTTPException(502, f"Gemini API error ({resp.status_code}): {detail}")
 
     result = resp.json()
@@ -116,13 +139,38 @@ async def call_gemini(pdf_bytes: bytes) -> dict:
         parts = candidates[0]["content"]["parts"]
         raw_text = parts[0]["text"].strip()
     except (KeyError, IndexError) as e:
+        logger.error("Unexpected Gemini response: %s", json.dumps(result)[:500])
         raise HTTPException(502, f"Unexpected Gemini response structure: {e}")
 
     # Parse JSON
     try:
-        return json.loads(raw_text)
+        data = json.loads(raw_text)
+        logger.info("Gemini returned valid JSON with %d pages", len(data.get("pages", [])))
+        return data
     except json.JSONDecodeError as e:
+        logger.error("Gemini returned invalid JSON: %s... | error: %s", raw_text[:200], e)
         raise HTTPException(502, f"Gemini returned invalid JSON: {e}")
+
+
+def convert_docx_to_pdf(docx_path: Path) -> Path | None:
+    """Convert DOCX to PDF via LibreOffice. Returns PDF path or None."""
+    if not LIBREOFFICE_BIN:
+        return None
+
+    try:
+        subprocess.run(
+            [LIBREOFFICE_BIN, "--headless", "--convert-to", "pdf",
+             "--outdir", str(docx_path.parent), str(docx_path)],
+            capture_output=True, timeout=120,
+        )
+        pdf_path = docx_path.with_suffix(".pdf")
+        if pdf_path.exists():
+            logger.info("PDF generated: %s", pdf_path)
+            return pdf_path
+    except (subprocess.TimeoutExpired, OSError) as e:
+        logger.warning("LibreOffice conversion failed: %s", e)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -131,10 +179,11 @@ async def call_gemini(pdf_bytes: bytes) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
+    """Serve the frontend."""
     index_path = STATIC_DIR / "index.html"
     if index_path.exists():
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>USCIS Translator</h1><p>Static files not found.</p>")
+    return HTMLResponse("<h1>USCIS Translator</h1><p>static/index.html not found.</p>")
 
 
 @app.post("/api/translate")
@@ -149,11 +198,12 @@ async def translate(file: UploadFile = File(...)):
 
     # Read uploaded file
     contents = await file.read()
-    if len(contents) > 50 * 1024 * 1024:  # 50MB limit
+    if len(contents) > 50 * 1024 * 1024:
         raise HTTPException(400, "File too large. Maximum size is 50MB.")
 
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "processing", "filename": file.filename}
+    logger.info("Job %s: translating %s (%d bytes)", job_id, file.filename, len(contents))
 
     try:
         # --- Step 1: Translate via Gemini ---
@@ -162,7 +212,7 @@ async def translate(file: UploadFile = File(...)):
         # --- Step 2: Validate ---
         errors = validate_json(translation_data)
         if errors:
-            jobs[job_id]["validation_warnings"] = errors
+            logger.warning("Job %s: schema validation warnings: %s", job_id, errors)
 
         # --- Step 3: Render DOCX ---
         safe_name = file.filename.rsplit(".", 1)[0]
@@ -175,19 +225,10 @@ async def translate(file: UploadFile = File(...)):
             template_path=TEMPLATE_PATH,
             output_path=str(docx_path),
         )
+        logger.info("Job %s: DOCX rendered to %s", job_id, docx_path)
 
-        # --- Step 4: Convert DOCX to PDF via LibreOffice ---
-        pdf_path = docx_path.with_suffix(".pdf")
-        os.system(
-            f'libreoffice --headless --convert-to pdf --outdir "{OUTPUT_DIR}" "{docx_path}" 2>/dev/null'
-        )
-
-        # LibreOffice names the output based on input filename
-        lo_pdf = OUTPUT_DIR / f"{job_id}_{safe_name}_translated.pdf"
-        pdf_available = lo_pdf.exists()
-        if pdf_available and lo_pdf != pdf_path:
-            lo_pdf.rename(pdf_path)
-            pdf_available = pdf_path.exists()
+        # --- Step 4: Convert DOCX to PDF ---
+        pdf_path = convert_docx_to_pdf(docx_path)
 
         # --- Step 5: Return result ---
         result = {
@@ -197,7 +238,7 @@ async def translate(file: UploadFile = File(...)):
             "docx_url": f"/api/download/{job_id}/docx",
             "metadata": translation_data.get("metadata", {}),
         }
-        if pdf_available:
+        if pdf_path:
             result["pdf_url"] = f"/api/download/{job_id}/pdf"
 
         if errors:
@@ -206,24 +247,26 @@ async def translate(file: UploadFile = File(...)):
         jobs[job_id] = {
             **result,
             "_docx_path": str(docx_path),
-            "_pdf_path": str(pdf_path) if pdf_available else None,
+            "_pdf_path": str(pdf_path) if pdf_path else None,
             "_docx_filename": docx_filename,
             "_pdf_filename": docx_filename.replace(".docx", ".pdf"),
             "_json": translation_data,
         }
 
+        logger.info("Job %s: complete", job_id)
         return result
 
     except HTTPException:
         raise
     except Exception as e:
+        logger.exception("Job %s failed", job_id)
         jobs[job_id] = {"status": "error", "error": str(e)}
         raise HTTPException(500, f"Translation failed: {e}")
 
 
 @app.get("/api/download/{job_id}/{file_type}")
 async def download(job_id: str, file_type: str):
-    """Download the translated DOCX or PDF."""
+    """Download the translated DOCX, PDF, or raw JSON."""
     job = jobs.get(job_id)
     if not job or job.get("status") != "complete":
         raise HTTPException(404, "Job not found or not complete.")
@@ -245,3 +288,15 @@ async def download(job_id: str, file_type: str):
         raise HTTPException(404, f"{file_type.upper()} file not available.")
 
     return FileResponse(path, media_type=media_type, filename=filename)
+
+
+@app.get("/api/health")
+async def health():
+    """Health check endpoint."""
+    return {
+        "status": "ok",
+        "gemini_configured": bool(GEMINI_API_KEY),
+        "gemini_model": GEMINI_MODEL,
+        "libreoffice_available": bool(LIBREOFFICE_BIN),
+        "template_configured": bool(TEMPLATE_PATH),
+    }
