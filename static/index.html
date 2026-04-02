@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USCIS Certified Translation</title>
+    <style>
+        :root {
+            --bg: #f5f5f7;
+            --surface: #ffffff;
+            --primary: #1a3a5c;
+            --primary-hover: #244d78;
+            --accent: #2e7d32;
+            --accent-hover: #388e3c;
+            --text: #1d1d1f;
+            --text-secondary: #6e6e73;
+            --border: #d2d2d7;
+            --drop-border: #1a3a5c;
+            --drop-bg: #e8f0fe;
+            --error: #d32f2f;
+            --error-bg: #fde8e8;
+            --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
+            --shadow-lg: 0 4px 24px rgba(0,0,0,0.1);
+            --radius: 12px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: var(--shadow);
+        }
+        header .logo {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+        header p {
+            font-size: 13px;
+            opacity: 0.75;
+            margin-top: 2px;
+        }
+
+        /* Main */
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 640px;
+        }
+
+        /* Drop Zone */
+        .drop-zone {
+            background: var(--surface);
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 48px 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow);
+        }
+        .drop-zone:hover, .drop-zone.drag-over {
+            border-color: var(--drop-border);
+            background: var(--drop-bg);
+        }
+        .drop-zone.drag-over {
+            transform: scale(1.01);
+            box-shadow: var(--shadow-lg);
+        }
+        .drop-zone .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        .drop-zone h2 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .drop-zone p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .drop-zone .browse {
+            color: var(--primary);
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        #file-input {
+            display: none;
+        }
+
+        /* File info */
+        .file-info {
+            display: none;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            margin-top: 16px;
+            box-shadow: var(--shadow);
+            align-items: center;
+            gap: 16px;
+        }
+        .file-info.visible {
+            display: flex;
+        }
+        .file-info .file-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--drop-bg);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .file-info .file-details {
+            flex: 1;
+            min-width: 0;
+        }
+        .file-info .file-name {
+            font-weight: 600;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .file-info .file-size {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-top: 2px;
+        }
+        .file-info .remove-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 20px;
+            padding: 4px;
+            border-radius: 6px;
+            transition: all 0.15s;
+        }
+        .file-info .remove-btn:hover {
+            background: var(--error-bg);
+            color: var(--error);
+        }
+
+        /* Translate button */
+        .translate-btn {
+            display: none;
+            width: 100%;
+            margin-top: 16px;
+            padding: 14px 24px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+        }
+        .translate-btn.visible {
+            display: block;
+        }
+        .translate-btn:hover:not(:disabled) {
+            background: var(--primary-hover);
+            box-shadow: var(--shadow-lg);
+        }
+        .translate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Progress */
+        .progress-section {
+            display: none;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 32px;
+            margin-top: 16px;
+            text-align: center;
+            box-shadow: var(--shadow);
+        }
+        .progress-section.visible {
+            display: block;
+        }
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .progress-section h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .progress-section p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .progress-steps {
+            margin-top: 20px;
+            text-align: left;
+        }
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+        .progress-step.active {
+            color: var(--primary);
+            font-weight: 600;
+        }
+        .progress-step.done {
+            color: var(--accent);
+        }
+        .step-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .progress-step .step-icon {
+            background: var(--border);
+            color: white;
+        }
+        .progress-step.active .step-icon {
+            background: var(--primary);
+        }
+        .progress-step.done .step-icon {
+            background: var(--accent);
+        }
+
+        /* Results */
+        .results-section {
+            display: none;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 32px;
+            margin-top: 16px;
+            box-shadow: var(--shadow);
+        }
+        .results-section.visible {
+            display: block;
+        }
+        .results-header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .results-header .check {
+            width: 56px;
+            height: 56px;
+            background: #e8f5e9;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin: 0 auto 12px;
+        }
+        .results-header h3 {
+            font-size: 18px;
+        }
+        .results-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-top: 4px;
+        }
+
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 16px;
+            background: var(--bg);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        .metadata-grid dt {
+            color: var(--text-secondary);
+        }
+        .metadata-grid dd {
+            font-weight: 600;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .download-btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        .download-btn.docx {
+            background: var(--primary);
+            color: white;
+        }
+        .download-btn.docx:hover { background: var(--primary-hover); }
+        .download-btn.pdf {
+            background: var(--error);
+            color: white;
+        }
+        .download-btn.pdf:hover { background: #c62828; }
+        .download-btn .btn-icon { font-size: 18px; }
+
+        .new-translation {
+            display: block;
+            width: 100%;
+            margin-top: 12px;
+            padding: 12px;
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .new-translation:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Warnings */
+        .warnings {
+            background: #fff8e1;
+            border: 1px solid #ffe082;
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .warnings summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #f57f17;
+        }
+        .warnings ul {
+            margin-top: 8px;
+            padding-left: 20px;
+        }
+
+        /* Error */
+        .error-section {
+            display: none;
+            background: var(--error-bg);
+            border: 1px solid #ffcdd2;
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-top: 16px;
+            text-align: center;
+        }
+        .error-section.visible {
+            display: block;
+        }
+        .error-section h3 {
+            color: var(--error);
+            margin-bottom: 8px;
+        }
+        .error-section p {
+            font-size: 14px;
+            color: #5f2120;
+        }
+        .error-section button {
+            margin-top: 16px;
+            padding: 10px 20px;
+            background: var(--error);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">&#9998;</div>
+        <div>
+            <h1>USCIS Certified Translation</h1>
+            <p>Upload a document in any language. Get a certified English translation.</p>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <!-- Drop Zone -->
+            <div class="drop-zone" id="drop-zone">
+                <div class="icon">&#128196;</div>
+                <h2>Drop your PDF here</h2>
+                <p>or <span class="browse" id="browse-btn">browse files</span></p>
+                <p style="margin-top: 12px; font-size: 12px; color: var(--text-secondary);">PDF up to 50MB</p>
+                <input type="file" id="file-input" accept=".pdf,application/pdf">
+            </div>
+
+            <!-- File Info -->
+            <div class="file-info" id="file-info">
+                <div class="file-icon">&#128196;</div>
+                <div class="file-details">
+                    <div class="file-name" id="file-name"></div>
+                    <div class="file-size" id="file-size"></div>
+                </div>
+                <button class="remove-btn" id="remove-btn" title="Remove file">&times;</button>
+            </div>
+
+            <!-- Translate Button -->
+            <button class="translate-btn" id="translate-btn">Translate Document</button>
+
+            <!-- Progress -->
+            <div class="progress-section" id="progress-section">
+                <div class="spinner"></div>
+                <h3>Translating your document...</h3>
+                <p>This may take 30 seconds to 2 minutes depending on document length.</p>
+                <div class="progress-steps">
+                    <div class="progress-step active" id="step-upload">
+                        <span class="step-icon">1</span> Uploading PDF
+                    </div>
+                    <div class="progress-step" id="step-translate">
+                        <span class="step-icon">2</span> Translating with AI
+                    </div>
+                    <div class="progress-step" id="step-render">
+                        <span class="step-icon">3</span> Rendering documents
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div class="results-section" id="results-section">
+                <div class="results-header">
+                    <div class="check">&#10003;</div>
+                    <h3>Translation Complete</h3>
+                    <p id="results-subtitle"></p>
+                </div>
+
+                <div id="warnings-container"></div>
+
+                <dl class="metadata-grid" id="metadata-grid"></dl>
+
+                <div class="download-buttons" id="download-buttons">
+                    <a class="download-btn docx" id="download-docx" href="#">
+                        <span class="btn-icon">&#128462;</span> Download DOCX
+                    </a>
+                    <a class="download-btn pdf" id="download-pdf" href="#" style="display:none;">
+                        <span class="btn-icon">&#128196;</span> Download PDF
+                    </a>
+                </div>
+
+                <button class="new-translation" id="new-translation-btn">Translate another document</button>
+            </div>
+
+            <!-- Error -->
+            <div class="error-section" id="error-section">
+                <h3>Translation Failed</h3>
+                <p id="error-message"></p>
+                <button id="retry-btn">Try Again</button>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        USCIS Certified Translation Pipeline &mdash; Corpus Localization LLC
+    </footer>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const browseBtn = document.getElementById('browse-btn');
+        const fileInfo = document.getElementById('file-info');
+        const fileName = document.getElementById('file-name');
+        const fileSize = document.getElementById('file-size');
+        const removeBtn = document.getElementById('remove-btn');
+        const translateBtn = document.getElementById('translate-btn');
+        const progressSection = document.getElementById('progress-section');
+        const resultsSection = document.getElementById('results-section');
+        const errorSection = document.getElementById('error-section');
+
+        let selectedFile = null;
+
+        // --- File Selection ---
+
+        browseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            fileInput.click();
+        });
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) selectFile(e.target.files[0]);
+        });
+
+        // Drag & Drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) selectFile(files[0]);
+        });
+
+        function selectFile(file) {
+            if (!file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file.');
+                return;
+            }
+            if (file.size > 50 * 1024 * 1024) {
+                alert('File too large. Maximum size is 50MB.');
+                return;
+            }
+            selectedFile = file;
+            fileName.textContent = file.name;
+            fileSize.textContent = formatBytes(file.size);
+            fileInfo.classList.add('visible');
+            translateBtn.classList.add('visible');
+            dropZone.style.display = 'none';
+        }
+
+        removeBtn.addEventListener('click', resetUI);
+
+        function resetUI() {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.classList.remove('visible');
+            translateBtn.classList.remove('visible');
+            dropZone.style.display = '';
+            progressSection.classList.remove('visible');
+            resultsSection.classList.remove('visible');
+            errorSection.classList.remove('visible');
+            // Reset progress steps
+            document.querySelectorAll('.progress-step').forEach(s => {
+                s.classList.remove('active', 'done');
+            });
+        }
+
+        document.getElementById('new-translation-btn').addEventListener('click', resetUI);
+        document.getElementById('retry-btn').addEventListener('click', resetUI);
+
+        // --- Translation ---
+
+        translateBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            translateBtn.disabled = true;
+            translateBtn.textContent = 'Translating...';
+            fileInfo.classList.remove('visible');
+            translateBtn.classList.remove('visible');
+            progressSection.classList.add('visible');
+            errorSection.classList.remove('visible');
+            resultsSection.classList.remove('visible');
+
+            setStep('step-upload');
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            try {
+                setStep('step-translate');
+
+                const response = await fetch('/api/translate', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                setStep('step-render');
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({}));
+                    throw new Error(err.detail || `Server error (${response.status})`);
+                }
+
+                const result = await response.json();
+                showResults(result);
+
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                translateBtn.disabled = false;
+                translateBtn.textContent = 'Translate Document';
+            }
+        });
+
+        function setStep(activeId) {
+            const steps = ['step-upload', 'step-translate', 'step-render'];
+            let reachedActive = false;
+            for (const id of steps) {
+                const el = document.getElementById(id);
+                if (id === activeId) {
+                    el.classList.add('active');
+                    el.classList.remove('done');
+                    reachedActive = true;
+                } else if (!reachedActive) {
+                    el.classList.remove('active');
+                    el.classList.add('done');
+                } else {
+                    el.classList.remove('active', 'done');
+                }
+            }
+        }
+
+        function showResults(result) {
+            progressSection.classList.remove('visible');
+
+            const meta = result.metadata || {};
+            document.getElementById('results-subtitle').textContent =
+                `${meta.source_language_name || 'Source'} to English — ${meta.document_type || 'Document'}`;
+
+            // Metadata grid
+            const grid = document.getElementById('metadata-grid');
+            grid.innerHTML = '';
+            const fields = [
+                ['Document', meta.document_title],
+                ['Language', meta.source_language_name],
+                ['Subject', meta.subject_name],
+                ['Institution', meta.issuing_institution],
+                ['Country', meta.issuing_country],
+                ['Date', meta.document_date],
+            ];
+            for (const [label, value] of fields) {
+                if (value) {
+                    grid.innerHTML += `<dt>${label}</dt><dd>${escapeHtml(value)}</dd>`;
+                }
+            }
+
+            // Warnings
+            const warnContainer = document.getElementById('warnings-container');
+            warnContainer.innerHTML = '';
+            if (result.validation_warnings && result.validation_warnings.length > 0) {
+                const details = document.createElement('details');
+                details.className = 'warnings';
+                details.innerHTML = `<summary>Schema Warnings (${result.validation_warnings.length})</summary>
+                    <ul>${result.validation_warnings.map(w => `<li>${escapeHtml(w)}</li>`).join('')}</ul>`;
+                warnContainer.appendChild(details);
+            }
+
+            // Download buttons
+            document.getElementById('download-docx').href = result.docx_url;
+            const pdfBtn = document.getElementById('download-pdf');
+            if (result.pdf_url) {
+                pdfBtn.href = result.pdf_url;
+                pdfBtn.style.display = '';
+            } else {
+                pdfBtn.style.display = 'none';
+            }
+
+            resultsSection.classList.add('visible');
+        }
+
+        function showError(message) {
+            progressSection.classList.remove('visible');
+            document.getElementById('error-message').textContent = message;
+            errorSection.classList.add('visible');
+        }
+
+        // --- Utilities ---
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

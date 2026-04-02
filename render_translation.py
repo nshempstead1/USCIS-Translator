@@ -181,11 +181,12 @@ def set_table_col_widths(table, widths_pct):
 
 def add_page_break(doc):
     """Insert a page break in the document."""
+    from docx.enum.text import WD_BREAK
     para = doc.add_paragraph()
     para.paragraph_format.space_after = Pt(0)
     para.paragraph_format.space_before = Pt(0)
     run = para.add_run()
-    run.add_break(docx.enum.text.WD_BREAK.PAGE)
+    run.add_break(WD_BREAK.PAGE)
     return para
 
 
