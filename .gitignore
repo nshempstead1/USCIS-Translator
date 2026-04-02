@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+*.docx
+*.pdf
+.env
+venv/
+.venv/

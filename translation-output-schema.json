@@ -1,0 +1,329 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "USCIS Certified Translation Output",
+  "description": "Structured translation output for automated python-docx rendering pipeline. A4 paper, Corpus Localization letterhead.",
+  "type": "object",
+  "required": ["metadata", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "required": ["source_language", "source_language_name", "document_type", "source_page_count", "document_title"],
+      "properties": {
+        "source_language": {
+          "type": "string",
+          "description": "ISO 639-1 language code",
+          "examples": ["es", "pt", "fr", "de", "zh", "ar", "he", "ko", "ja", "ru"]
+        },
+        "source_language_name": {
+          "type": "string",
+          "description": "Full English name of the source language",
+          "examples": ["Spanish", "Portuguese", "French", "German", "Chinese", "Arabic"]
+        },
+        "document_type": {
+          "type": "string",
+          "enum": [
+            "academic_transcript",
+            "diploma",
+            "degree_certificate",
+            "birth_certificate",
+            "marriage_certificate",
+            "death_certificate",
+            "police_clearance",
+            "power_of_attorney",
+            "court_document",
+            "employment_letter",
+            "bank_statement",
+            "medical_record",
+            "passport_page",
+            "national_id",
+            "generic"
+          ]
+        },
+        "source_page_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "document_title": {
+          "type": "string",
+          "description": "Translated title of the document"
+        },
+        "issuing_institution": {
+          "type": "string",
+          "description": "Name of the institution that issued the document"
+        },
+        "issuing_country": {
+          "type": "string"
+        },
+        "subject_name": {
+          "type": "string",
+          "description": "Name of the person the document is about"
+        },
+        "document_date": {
+          "type": "string",
+          "description": "Date on the document in 'Month Day, Year' format"
+        },
+        "notes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Translator notes about OCR issues, overlapping elements, etc."
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/page"
+      }
+    }
+  },
+  "definitions": {
+    "page": {
+      "type": "object",
+      "required": ["page_number", "elements"],
+      "properties": {
+        "page_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "continuation_header": {
+          "type": "string",
+          "description": "Italic text shown at top of page when continuing a split table"
+        },
+        "elements": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/element"
+          }
+        }
+      }
+    },
+    "element": {
+      "oneOf": [
+        { "$ref": "#/definitions/institution_header" },
+        { "$ref": "#/definitions/heading" },
+        { "$ref": "#/definitions/paragraph" },
+        { "$ref": "#/definitions/info_block" },
+        { "$ref": "#/definitions/table" },
+        { "$ref": "#/definitions/summary_block" },
+        { "$ref": "#/definitions/grading_scale" },
+        { "$ref": "#/definitions/signature_block" },
+        { "$ref": "#/definitions/separator" },
+        { "$ref": "#/definitions/footer_text" },
+        { "$ref": "#/definitions/placeholder" },
+        { "$ref": "#/definitions/degree_title" }
+      ]
+    },
+    "institution_header": {
+      "type": "object",
+      "required": ["type", "columns"],
+      "properties": {
+        "type": { "const": "institution_header" },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["content", "width_pct", "align"],
+            "properties": {
+              "content": { "type": "string" },
+              "width_pct": { "type": "number", "minimum": 1, "maximum": 100 },
+              "align": { "type": "string", "enum": ["left", "center", "right"] }
+            }
+          }
+        }
+      }
+    },
+    "heading": {
+      "type": "object",
+      "required": ["type", "text", "level"],
+      "properties": {
+        "type": { "const": "heading" },
+        "text": { "type": "string" },
+        "level": { "type": "integer", "enum": [1, 2] }
+      }
+    },
+    "paragraph": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "paragraph" },
+        "text": { "type": "string" },
+        "style": {
+          "type": "string",
+          "enum": ["bold", "italic", "small", "center", "bold_center", "italic_small"]
+        }
+      }
+    },
+    "info_block": {
+      "type": "object",
+      "required": ["type", "layout", "pairs"],
+      "properties": {
+        "type": { "const": "info_block" },
+        "layout": {
+          "type": "string",
+          "enum": ["two_column", "stacked"]
+        },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "table": {
+      "type": "object",
+      "required": ["type", "table_id", "headers", "column_widths_pct", "rows"],
+      "properties": {
+        "type": { "const": "table" },
+        "table_id": {
+          "type": "string",
+          "description": "Identifier to link split tables across pages"
+        },
+        "continues_from_previous": {
+          "type": "boolean",
+          "default": false
+        },
+        "headers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "column_widths_pct": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 1, "maximum": 100 },
+          "description": "Column widths as percentages; should sum to ~100"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/table_row"
+          }
+        }
+      }
+    },
+    "table_row": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "cells"],
+          "properties": {
+            "type": { "const": "data" },
+            "cells": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "text"],
+          "properties": {
+            "type": { "const": "separator" },
+            "text": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "summary_block": {
+      "type": "object",
+      "required": ["type", "pairs"],
+      "properties": {
+        "type": { "const": "summary_block" },
+        "pairs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "grading_scale": {
+      "type": "object",
+      "required": ["type", "title", "rows"],
+      "properties": {
+        "type": { "const": "grading_scale" },
+        "title": { "type": "string" },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["range", "description"],
+            "properties": {
+              "range": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "signature_block": {
+      "type": "object",
+      "required": ["type", "signatures"],
+      "properties": {
+        "type": { "const": "signature_block" },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["signature"],
+            "properties": {
+              "signature": { "type": "string" },
+              "name": { "type": "string", "default": "" },
+              "title": { "type": "string", "default": "" },
+              "align": { "type": "string", "enum": ["left", "center", "right"], "default": "center" }
+            }
+          }
+        }
+      }
+    },
+    "separator": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "const": "separator" }
+      }
+    },
+    "footer_text": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": { "const": "footer_text" },
+        "text": { "type": "string" },
+        "style": {
+          "type": "string",
+          "enum": ["small", "very_small", "italic"],
+          "default": "small"
+        }
+      }
+    },
+    "placeholder": {
+      "type": "object",
+      "required": ["type", "content"],
+      "properties": {
+        "type": { "const": "placeholder" },
+        "content": { "type": "string" },
+        "align": { "type": "string", "enum": ["left", "center", "right"], "default": "center" }
+      }
+    },
+    "degree_title": {
+      "type": "object",
+      "required": ["type", "original", "english"],
+      "properties": {
+        "type": { "const": "degree_title" },
+        "original": { "type": "string" },
+        "english": { "type": "string" }
+      }
+    }
+  }
+}
